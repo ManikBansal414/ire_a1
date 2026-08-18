@@ -1,3 +1,15 @@
+
+def _to_list(x):
+    if isinstance(x, (list, tuple)):
+        return list(x)
+    try:
+        import numpy as _np
+        if isinstance(x, _np.ndarray):
+            return x.tolist()
+    except Exception:
+        pass
+    return [] if x is None else []
+
 """
 src/evaluation/slicing.py — Q4: User and article slicing
 ==========================================================
@@ -29,7 +41,7 @@ def split_cold_warm(impressions: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFra
     Uses the length of the 'history' list for each impression.
     """
     history_len = impressions["history"].apply(
-        lambda h: len(h) if isinstance(h, list) else 0
+        lambda h: len(_to_list(h))
     )
     cold = impressions[history_len < COLD_START_THRESHOLD].copy()
     warm = impressions[history_len >= COLD_START_THRESHOLD].copy()
@@ -50,14 +62,14 @@ def split_head_tail_articles(articles: pd.DataFrame, impressions: pd.DataFrame) 
     all_aids = [
         aid
         for hist in impressions["history"]
-        for aid in (hist if isinstance(hist, list) else [])
+        for aid in _to_list(hist)
     ]
     if not all_aids:
         # Fall back to candidate appearances
         all_aids = [
             aid
             for cands in impressions["candidates"]
-            for aid in (cands if isinstance(cands, list) else [])
+            for aid in _to_list(cands)
         ]
 
     pop = pd.Series(all_aids).value_counts()
@@ -84,8 +96,8 @@ def filter_impressions_by_article_set(
 
     def _has_head_positive(row):
         cands = row["candidates"] if isinstance(row["candidates"], list) else []
-        labels = row["labels"] if isinstance(row["labels"], list) else []
-        for c, l in zip(cands, labels):
+        labels = _to_list(row["labels"])
+        for c, l in zip(_to_list(cands), _to_list(labels)):
             if l == 1 and c in article_set:
                 return True
         return False

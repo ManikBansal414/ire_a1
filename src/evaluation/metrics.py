@@ -19,6 +19,20 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
+
+import numpy as np
+
+def _to_list(x):
+    if isinstance(x, (list, tuple)):
+        return list(x)
+    try:
+        import numpy as _np
+        if isinstance(x, _np.ndarray):
+            return x.tolist()
+    except Exception:
+        pass
+    return [] if x is None else [x]
+
 log = logging.getLogger(__name__)
 
 
@@ -73,9 +87,9 @@ def compute_ranking_metrics(
     ndcg_scores = {k: [] for k in k_values}
 
     for _, row in impressions.iterrows():
-        candidates = row["candidates"] if isinstance(row["candidates"], list) else []
-        labels = row["labels"] if isinstance(row["labels"], list) else []
-        ranked = row[ranked_col] if isinstance(row[ranked_col], list) else []
+        candidates = _to_list(row["candidates"])
+        labels = _to_list(row["labels"])
+        ranked = _to_list(row[ranked_col])
 
         if not candidates or not labels or not ranked:
             continue
@@ -127,7 +141,7 @@ def compute_novelty(
     total_clicks = sum(article_popularity.values()) or 1
     scores = []
     for ranked in ranked_lists:
-        for aid in ranked[:top_k]:
+        for aid in _to_list(ranked)[:top_k]:
             pop = article_popularity.get(aid, 1) / total_clicks
             scores.append(-math.log2(pop + 1e-10))
     return float(np.mean(scores)) if scores else 0.0
@@ -144,7 +158,7 @@ def compute_intra_list_diversity(
     """
     scores = []
     for ranked in ranked_lists:
-        top = ranked[:top_k]
+        top = _to_list(ranked)[:top_k]
         if len(top) < 2:
             continue
         cats = [article_category_map.get(aid, "unknown") for aid in top]
@@ -167,7 +181,7 @@ def compute_coverage(
     """Coverage = |unique recommended articles| / total_articles."""
     recommended = set()
     for ranked in ranked_lists:
-        recommended.update(ranked[:top_k])
+        recommended.update(_to_list(ranked)[:top_k])
     return len(recommended) / total_articles if total_articles > 0 else 0.0
 
 
@@ -184,7 +198,7 @@ def compute_beyond_accuracy_metrics(
     all_history = [
         aid
         for hist in impressions["history"]
-        for aid in (hist if isinstance(hist, list) else [])
+        for aid in _to_list(hist)
     ]
     pop_counter: Dict[str, int] = {}
     for aid in all_history:
@@ -194,7 +208,7 @@ def compute_beyond_accuracy_metrics(
     n_articles = len(articles)
 
     ranked_lists = [
-        row[ranked_col] if isinstance(row[ranked_col], list) else []
+        _to_list(row[ranked_col])
         for _, row in impressions.iterrows()
     ]
 
