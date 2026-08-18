@@ -1,0 +1,26 @@
+# Core data
+numpy>=1.24
+pandas>=2.0
+pyarrow>=12.0        # parquet support for EB-NeRD
+
+# BM25 / Lexical retrieval
+rank-bm25>=0.2.2
+
+# Semantic retrieval
+faiss-cpu>=1.7.4
+sentence-transformers>=2.2.2
+
+# ML utilities
+scikit-learn>=1.3
+scipy>=1.11
+
+# Progress & utilities
+tqdm>=4.65
+requests>=2.31
+
+# Evaluation
+matplotlib>=3.7       # optional: plotting results
+tabulate>=0.9         # pretty-print metric tables
+
+# NLP
+nltk>=3.8

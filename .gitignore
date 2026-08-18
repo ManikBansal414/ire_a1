@@ -1,0 +1,49 @@
+# ── Data & large binary files (never commit) ──────────────────────────────────
+data/
+*.zip
+*.tar.gz
+*.gz
+*.pt
+*.ckpt
+*.bin
+*.npy
+*.npz
+*.faiss
+*.index
+*.pkl
+*.parquet
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+env/
+venv/
+.venv/
+.env
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Outputs (keep predictions committed but ignore intermediate) ───────────────
+outputs/embeddings/
+outputs/indexes/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
