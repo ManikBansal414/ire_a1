@@ -1,5 +1,5 @@
 """
-run_eval.py — Q4: Offline Evaluation Harness
+run_eval.py  Q4: Offline Evaluation Harness
 =============================================
 Run the full evaluation over pre-computed ranked results.
 
@@ -38,7 +38,7 @@ TOP_K_BEYOND = 10
 N_BOOTSTRAP = 1000
 
 
-def _load_ranked(dataset: str, retriever: str, split: str) -> pd.DataFrame:
+def _load_ranked(dataset: str, retriever: str, split: str, processed_dir=None) -> pd.DataFrame:
     """Load pre-computed ranked results from outputs/."""
     ranked_path = Path(f"outputs/predictions/{dataset}/{retriever}/{split}_ranked.parquet")
     if not ranked_path.exists():
@@ -63,6 +63,20 @@ def _load_ranked(dataset: str, retriever: str, split: str) -> pd.DataFrame:
             except Exception:
                 pass
 
+
+    if "history" not in df.columns:
+        try:
+            from src.pipeline.feature_store import load_impressions as _li
+            if processed_dir is not None:
+                full_imp = _li(processed_dir, split)
+                hmap = dict(zip(full_imp["impression_id"].astype(str), full_imp["history"]))
+                df["impression_id"] = df["impression_id"].astype(str)
+                df["history"] = df["impression_id"].map(hmap).apply(lambda x: x if isinstance(x, list) else [])
+            else:
+                df["history"] = [[] for _ in range(len(df))]
+        except Exception as e:
+            import logging; logging.getLogger("run_eval").warning(f"Cannot merge history: {e}")
+            df["history"] = [[] for _ in range(len(df))]
     return df, ranked_col
 
 
@@ -73,17 +87,17 @@ def evaluate_one(
     run_bootstrap: bool = True,
     n_bootstrap: int = N_BOOTSTRAP,
 ) -> dict:
-    log.info(f"\n{'═' * 60}")
+    log.info(f"\n{'' * 60}")
     log.info(f"  dataset={dataset}  retriever={retriever}  split={split}")
-    log.info(f"{'═' * 60}")
+    log.info(f"{'' * 60}")
 
     processed_dir = Path(f"data/processed/{dataset}")
     articles = load_articles(processed_dir)
 
     # Load ranked impressions
-    impressions, ranked_col = _load_ranked(dataset, retriever, split)
+    impressions, ranked_col = _load_ranked(dataset, retriever, split, processed_dir)
 
-    # ── Slices ─────────────────────────────────────────────────────────────────
+    #  Slices 
     slices = get_all_slices(impressions, articles, ranked_col)
 
     results = {}
@@ -92,7 +106,7 @@ def evaluate_one(
             log.warning(f"  Slice '{slice_name}' is empty, skipping.")
             continue
 
-        log.info(f"\n  ── Slice: {slice_name} ({len(slice_df):,} impressions) ──")
+        log.info(f"\n   Slice: {slice_name} ({len(slice_df):,} impressions) ")
 
         # Accuracy metrics
         acc_metrics = compute_ranking_metrics(slice_df, ranked_col, k_values=K_VALUES)
@@ -110,13 +124,13 @@ def evaluate_one(
         # Bootstrap CI (only for 'all' slice)
         ci_bounds = {}
         if run_bootstrap and slice_name == "all":
-            log.info(f"  Running {n_bootstrap} bootstrap resamples …")
+            log.info(f"  Running {n_bootstrap} bootstrap resamples ")
             metric_fn = partial(compute_ranking_metrics, ranked_col=ranked_col, k_values=K_VALUES)
             ci_bounds = bootstrap_ci(slice_df, metric_fn, n_bootstrap=n_bootstrap)
 
         # Print results
         table = format_ci_table(all_metrics, ci_bounds)
-        print(f"\n[{dataset.upper()}] [{retriever.upper()}] [{split}] — Slice: {slice_name}")
+        print(f"\n[{dataset.upper()}] [{retriever.upper()}] [{split}]  Slice: {slice_name}")
         print(table)
 
         results[slice_name] = {
@@ -125,13 +139,13 @@ def evaluate_one(
             "n": len(slice_df),
         }
 
-    # ── Save ────────────────────────────────────────────────────────────────────
+    #  Save 
     out_dir = Path(f"outputs/results/{dataset}/{retriever}")
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{split}_eval.json"
     with open(out_path, "w") as f:
         json.dump(results, f, indent=2)
-    log.info(f"\n  Results saved → {out_path}")
+    log.info(f"\n  Results saved  {out_path}")
     return results
 
 
@@ -146,13 +160,13 @@ def compare_retrievers(dataset: str, split: str):
             log.warning(str(e))
             results[retriever] = {}
 
-    print(f"\n{'═' * 70}")
-    print(f"  COMPARISON: {dataset.upper()} — {split}  |  BM25 vs Semantic")
-    print(f"{'═' * 70}")
+    print(f"\n{'' * 70}")
+    print(f"  COMPARISON: {dataset.upper()}  {split}  |  BM25 vs Semantic")
+    print(f"{'' * 70}")
     all_metrics = set()
     for v in results.values():
         all_metrics.update(v.keys())
-    print(f"{'Metric':<20} {'BM25':>12} {'Semantic':>12}  {'Δ (sem-bm25)':>14}")
+    print(f"{'Metric':<20} {'BM25':>12} {'Semantic':>12}  {' (sem-bm25)':>14}")
     print("-" * 62)
     for m in sorted(all_metrics):
         bm25_val = results.get("bm25", {}).get(m, float("nan"))

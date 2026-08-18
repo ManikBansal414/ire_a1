@@ -29,6 +29,7 @@ import json
 import logging
 import re
 from pathlib import Path
+import pathlib
 from typing import Tuple
 
 import pandas as pd
@@ -205,65 +206,44 @@ def _parse_ebnerd_articles(articles_path: Path) -> pd.DataFrame:
                "category", "subcategory", "entities", "dataset"]]
 
 
-def _parse_ebnerd_behaviors(behaviors_path: Path, split_name: str) -> pd.DataFrame:
-    df = pd.read_parquet(behaviors_path)
-    df = df.rename(columns={
-        "impression_id": "impression_id",
-        "user_id": "user_id",
-        "impression_time": "time",
-        "article_ids_inview": "candidates",
-        "article_ids_clicked": "_clicked",
-        "read_time": "_read_time",
-    })
-    # Normalise time
-    if "time" in df.columns:
-        df["time"] = pd.to_datetime(df["time"], utc=True)
+def _parse_ebnerd_behaviors(behaviors_path: pathlib.Path, history_path: pathlib.Path, split_name: str) -> pd.DataFrame:
+    beh = pd.read_parquet(behaviors_path)
 
-    # History: stored as list column or "article_id_fixed_list" etc.
-    # Try common column names
-    history_col = next(
-        (c for c in df.columns if "history" in c.lower() or "click" in c.lower()
-         and "inview" not in c.lower()), None
-    )
-    if history_col and history_col != "_clicked":
-        df["history"] = df[history_col].apply(
-            lambda x: [str(i) for i in x] if isinstance(x, list) else []
-        )
-    else:
-        df["history"] = [[] for _ in range(len(df))]
+    # Build user history map from history.parquet (article_id_fixed array per user)
+    user_history = {}
+    if history_path.exists():
+        hist_df = pd.read_parquet(history_path)
+        for _, row in hist_df.iterrows():
+            uid = str(int(row['user_id']))
+            aids = [str(int(a)) for a in row['article_id_fixed'] if not pd.isna(a)]
+            user_history[uid] = aids
 
-    # Build labels: 1 if candidate in clicked set, else 0
-    df["candidates"] = df["candidates"].apply(
-        lambda x: [str(i) for i in x] if isinstance(x, list) else []
-    )
-    if "_clicked" in df.columns:
-        df["_clicked"] = df["_clicked"].apply(
-            lambda x: set(str(i) for i in x) if isinstance(x, list) else set()
-        )
-        df["labels"] = df.apply(
-            lambda r: [1 if c in r["_clicked"] else 0 for c in r["candidates"]], axis=1
-        )
-    else:
-        df["labels"] = df["candidates"].apply(lambda x: [0] * len(x))
+    rows = []
+    for _, r in beh.iterrows():
+        uid = str(int(r['user_id']))
+        imp_id = str(int(r['impression_id']))
+        t = pd.Timestamp(r['impression_time']).tz_localize('UTC') if r['impression_time'].tzinfo is None else pd.Timestamp(r['impression_time'])
 
-    df["impression_id"] = df["impression_id"].astype(str)
-    df["user_id"] = df["user_id"].astype(str)
-    df["split"] = split_name
-    df["dataset"] = "ebnerd"
+        inview = [str(int(a)) for a in r['article_ids_inview']] if hasattr(r['article_ids_inview'], '__iter__') else []
+        clicked_set = set(str(int(a)) for a in r['article_ids_clicked']) if hasattr(r['article_ids_clicked'], '__iter__') else set()
+        labels = [1 if c in clicked_set else 0 for c in inview]
+        history = user_history.get(uid, [])
 
-    return df[["impression_id", "user_id", "time", "history",
-               "candidates", "labels", "split", "dataset"]]
+        rows.append({'impression_id': imp_id, 'user_id': uid, 'time': t,
+                     'history': history, 'candidates': inview, 'labels': labels,
+                     'split': split_name, 'dataset': 'ebnerd'})
+
+    return pd.DataFrame(rows)
 
 
-def parse_ebnerd(raw_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def parse_ebnerd(raw_dir) -> tuple:
     """Return (articles, impressions) DataFrames for EB-NeRD demo."""
-    raw_dir = Path(raw_dir)
+    raw_dir = pathlib.Path(raw_dir)
     base = _find_ebnerd_dirs(raw_dir)
     log.info(f"  EB-NeRD base dir: {base}")
 
     articles_path = base / "articles.parquet"
     if not articles_path.exists():
-        # Try train subdir
         articles_path = base / "train" / "articles.parquet"
 
     articles = _parse_ebnerd_articles(articles_path)
@@ -271,10 +251,12 @@ def parse_ebnerd(raw_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     impressions_list = []
     for split, dirname in [("train", "train"), ("dev", "validation")]:
         beh_path = base / dirname / "behaviors.parquet"
+        hist_path = base / dirname / "history.parquet"
         if not beh_path.exists():
             beh_path = base / split / "behaviors.parquet"
+            hist_path = base / split / "history.parquet"
         if beh_path.exists():
-            impressions_list.append(_parse_ebnerd_behaviors(beh_path, split))
+            impressions_list.append(_parse_ebnerd_behaviors(beh_path, hist_path, split))
         else:
             log.warning(f"  EB-NeRD behaviors not found for split '{split}' at {beh_path}")
 
