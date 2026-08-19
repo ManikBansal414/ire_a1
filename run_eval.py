@@ -48,7 +48,12 @@ def _load_ranked(dataset: str, retriever: str, split: str, processed_dir=None) -
         )
     df = pd.read_parquet(ranked_path)
 
-    ranked_col = f"{retriever}_ranked"
+    # Prefer reranked columns (per-impression scoring) for AUC/MRR/nDCG.
+    # *_ranked = global catalog retrieval (for recall@K only).
+    # *_reranked = per-impression candidate scoring (for ranking metrics).
+    df_cols = pd.read_parquet(ranked_path).columns.tolist()
+    reranked_col = f"{retriever}_reranked"
+    ranked_col = reranked_col if reranked_col in df_cols else f"{retriever}_ranked"
 
     # Deserialise list columns if stored as strings (compatibility)
     for col in ["candidates", "labels", ranked_col]:

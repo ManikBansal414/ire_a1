@@ -31,20 +31,26 @@ import pandas as pd
 
 log = logging.getLogger(__name__)
 
-COLD_START_THRESHOLD = 5   # clicks in history
+# Cold-start threshold is computed dynamically per dataset:
+# bottom 25th percentile of history length = cold-start users
+# This adapts to EB-NeRD (avg 281 clicks) vs MIND (avg ~10 clicks)
+COLD_START_THRESHOLD = 5   # fallback; overridden by split_cold_warm()
 POPULARITY_HEAD_PCT = 0.20  # top 20% = "head"
 
 
 def split_cold_warm(impressions: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Split impressions into cold-start (< threshold clicks) and warm.
-    Uses the length of the 'history' list for each impression.
+    Split impressions into cold-start and warm using dynamic threshold.
+    Cold-start = bottom 25th percentile of history length in this split.
+    This adapts automatically to EB-NeRD (mean 281 clicks) vs MIND (mean ~10).
     """
-    history_len = impressions["history"].apply(
-        lambda h: len(_to_list(h))
-    )
-    cold = impressions[history_len < COLD_START_THRESHOLD].copy()
-    warm = impressions[history_len >= COLD_START_THRESHOLD].copy()
+    import numpy as np
+    history_len = impressions["history"].apply(lambda h: len(_to_list(h)))
+    # Use 25th percentile as the cold/warm boundary
+    threshold = max(1, int(np.percentile(history_len, 25)))
+    log.info(f"  Cold-start threshold (25th pct): {threshold} clicks")
+    cold = impressions[history_len <= threshold].copy()
+    warm = impressions[history_len > threshold].copy()
     log.info(
         f"  Cold-start: {len(cold):,} impressions  |  Warm: {len(warm):,} impressions"
     )
@@ -54,30 +60,34 @@ def split_cold_warm(impressions: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFra
 def split_head_tail_articles(articles: pd.DataFrame, impressions: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
     """
     Split article_ids into head (popular) and tail (long-tail).
-    Popularity = number of times article_id appears in all impression histories.
+    Popularity = total exposure count across candidate sets (in-view articles).
+    This captures article exposure frequency, not just click frequency.
 
-    Returns (head_ids, tail_ids) as pd.Series of article_ids.
+    Returns (head_ids, tail_ids) as pd.Index of string article_ids.
     """
-    # Count appearances
-    all_aids = [
-        aid
-        for hist in impressions["history"]
-        for aid in _to_list(hist)
-    ]
+    # Count candidate exposures (articles shown in impressions)
+    all_aids = []
+    for cands in impressions["candidates"]:
+        for aid in _to_list(cands):
+            all_aids.append(str(aid))
+
     if not all_aids:
-        # Fall back to candidate appearances
-        all_aids = [
-            aid
-            for cands in impressions["candidates"]
-            for aid in _to_list(cands)
-        ]
+        # Fall back to history
+        for hist in impressions["history"]:
+            for aid in _to_list(hist):
+                all_aids.append(str(aid))
+
+    if not all_aids:
+        # No data: return all as tail
+        all_ids = pd.Index(articles["article_id"].astype(str))
+        return pd.Index([]), all_ids
 
     pop = pd.Series(all_aids).value_counts()
-    pop = pop.reindex(articles["article_id"], fill_value=0)
 
     n_head = max(1, int(len(pop) * POPULARITY_HEAD_PCT))
-    head_ids = pop.nlargest(n_head).index
-    tail_ids = pop.index.difference(head_ids)
+    head_ids = pd.Index(pop.nlargest(n_head).index.astype(str))
+    tail_ids = pd.Index(pop.iloc[n_head:].index.astype(str))
+    log.info(f"  Head articles: {len(head_ids):,}  |  Tail: {len(tail_ids):,}")
 
     log.info(f"  Head articles: {len(head_ids):,}  |  Tail: {len(tail_ids):,}")
     return pd.Series(head_ids), pd.Series(tail_ids)
@@ -95,10 +105,10 @@ def filter_impressions_by_article_set(
     article_set = set(article_set)
 
     def _has_head_positive(row):
-        cands = row["candidates"] if isinstance(row["candidates"], list) else []
+        cands = _to_list(row["candidates"])
         labels = _to_list(row["labels"])
         for c, l in zip(_to_list(cands), _to_list(labels)):
-            if l == 1 and c in article_set:
+            if int(l) == 1 and str(c) in article_set:
                 return True
         return False
 

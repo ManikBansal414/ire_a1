@@ -174,6 +174,55 @@ def run_bm25_retrieval(
 
 # ── CLI entry point ────────────────────────────────────────────────────────────
 
+
+
+def rerank_candidates_bm25(
+    impressions,
+    index,
+    article_title_map,
+    max_query_articles: int = 5,
+):
+    """
+    Q2 / Q4: Re-rank each impression's OWN candidate set using BM25 scores.
+
+    Unlike global retrieval (which finds top-K from the whole catalog),
+    this scores only the candidates already shown in each impression and
+    sorts them by BM25 score descending.  This produces the ranked list
+    used for AUC / MRR / nDCG computation in the evaluation harness.
+
+    Returns impressions DataFrame with a new column 'bm25_reranked'.
+    """
+    from tqdm import tqdm
+    results = []
+    for _, row in tqdm(impressions.iterrows(), total=len(impressions),
+                       desc="  BM25 re-ranking"):
+        history   = row["history"]   if isinstance(row["history"],   list) else list(row["history"])   if hasattr(row["history"],   "__iter__") else []
+        candidates = row["candidates"] if isinstance(row["candidates"], list) else list(row["candidates"]) if hasattr(row["candidates"], "__iter__") else []
+
+        query_tokens = _build_query(history, article_title_map,
+                                    max_articles=max_query_articles)
+        if not query_tokens or not candidates:
+            results.append(candidates)
+            continue
+
+        # Score each candidate individually using the BM25 index
+        # index._id_to_idx maps article_id -> position in the index corpus
+        scores = []
+        bm25_scores = index.bm25.get_scores(query_tokens)
+        for cid in candidates:
+            idx = index._id_to_idx.get(str(cid))
+            score = float(bm25_scores[idx]) if idx is not None else 0.0
+            scores.append((cid, score))
+
+        # Sort candidates by BM25 score descending
+        scores.sort(key=lambda x: x[1], reverse=True)
+        results.append([c for c, _ in scores])
+
+    impressions = impressions.copy()
+    impressions["bm25_reranked"] = results
+    return impressions
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 

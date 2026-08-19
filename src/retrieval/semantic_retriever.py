@@ -262,6 +262,48 @@ def run_semantic_retrieval(
 
 # ── CLI entry point ────────────────────────────────────────────────────────────
 
+
+
+def rerank_candidates_semantic(
+    impressions,
+    faiss_index,
+    recency_decay: float = 0.9,
+    max_history: int = 50,
+):
+    """
+    Q3 / Q4: Re-rank each impression's OWN candidates by cosine similarity
+    to the user embedding.  Used for AUC/MRR/nDCG computation.
+    """
+    from tqdm import tqdm
+    import numpy as np
+
+    results = []
+    for _, row in tqdm(impressions.iterrows(), total=len(impressions),
+                       desc="  Semantic re-ranking"):
+        history    = list(row["history"])   if hasattr(row["history"],   "__iter__") else []
+        candidates = list(row["candidates"]) if hasattr(row["candidates"], "__iter__") else []
+        history = history[-max_history:]
+
+        user_vec = _user_vector(history, faiss_index, recency_decay)
+        if user_vec is None or not candidates:
+            results.append(candidates)
+            continue
+
+        # Score each candidate by dot product with user vector (L2-normalised = cosine)
+        scores = []
+        for cid in candidates:
+            emb = faiss_index.get_embedding(str(cid))
+            score = float(np.dot(user_vec, emb)) if emb is not None else 0.0
+            scores.append((cid, score))
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+        results.append([c for c, _ in scores])
+
+    impressions = impressions.copy()
+    impressions["semantic_reranked"] = results
+    return impressions
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -312,12 +354,13 @@ def main():
         print(f"  {key}: {val:.4f}")
     print()
 
-    # Save ranked results
+    # Save ranked results (global retrieval) + per-impression re-ranking
     result_df = run_semantic_retrieval(impressions, faiss_idx, top_k=args.top_k)
+    result_df = rerank_candidates_semantic(result_df, faiss_idx)
     out_path = results_dir / f"{args.split}_ranked.parquet"
-    result_df[["impression_id", "user_id", "candidates", "labels", "semantic_ranked"]].to_parquet(
-        out_path, index=False
-    )
+    save_cols = ["impression_id", "user_id", "candidates", "labels",
+                 "semantic_ranked", "semantic_reranked"]
+    result_df[save_cols].to_parquet(out_path, index=False)
     log.info(f"Ranked results saved → {out_path}")
 
     import json

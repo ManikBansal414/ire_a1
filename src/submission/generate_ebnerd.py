@@ -30,7 +30,14 @@ def generate_ebnerd_submission(
 ) -> Path:
     import pandas as pd
 
-    ranked_col = f"{retriever}_ranked"
+    # Use per-impression reranked col for submission (proper lexical/semantic order)
+    # Fall back to global ranked if reranked not available
+    import pandas as _pd2
+    _tmp_path = Path(f"outputs/predictions/ebnerd/{retriever}/{split}_ranked.parquet")
+    _tmp_cols = _pd2.read_parquet(_tmp_path).columns.tolist() if _tmp_path.exists() else []
+    reranked_col = f"{retriever}_reranked"
+    ranked_col = reranked_col if reranked_col in _tmp_cols else f"{retriever}_ranked"
+    del _tmp_path, _tmp_cols, _pd2
     ranked_path = Path(f"outputs/predictions/ebnerd/{retriever}/{split}_ranked.parquet")
 
     if not ranked_path.exists():
@@ -42,10 +49,13 @@ def generate_ebnerd_submission(
     df = pd.read_parquet(ranked_path)
 
     # Deserialise if needed
+    import numpy as np
     for col in ["candidates", ranked_col]:
         if df[col].dtype == object:
             sample = df[col].iloc[0] if len(df) > 0 else ""
-            if isinstance(sample, str):
+            if isinstance(sample, np.ndarray):
+                df[col] = df[col].apply(lambda x: list(map(str, x)))
+            elif isinstance(sample, str):
                 df[col] = df[col].apply(lambda x: x.split("|") if isinstance(x, str) and x else [])
 
     out_dir = Path(out_dir)
