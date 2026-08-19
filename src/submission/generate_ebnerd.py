@@ -68,7 +68,7 @@ def generate_ebnerd_submission(
         candidates = row["candidates"] if isinstance(row["candidates"], list) else []
         ranked = row[ranked_col] if isinstance(row[ranked_col], list) else []
         ranks = _rank_candidates(candidates, ranked)
-        rank_str = " ".join(map(str, ranks))
+        rank_str = ",".join(map(str, ranks))
         lines.append(f"{imp_id} [{rank_str}]")
 
     with open(out_path, "w", encoding="utf-8") as f:
