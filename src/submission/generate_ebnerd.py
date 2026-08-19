@@ -60,7 +60,7 @@ def generate_ebnerd_submission(
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "prediction.txt"
+    out_path = out_dir / "predictions.txt"
 
     lines = []
     for _, row in df.iterrows():
@@ -87,7 +87,7 @@ def main():
 
     out_dir = Path(f"outputs/submissions/ebnerd/{args.retriever}")
     generate_ebnerd_submission(args.retriever, args.split, out_dir)
-    print(f"Submission file ready: {out_dir}/prediction.txt")
+    print(f"Submission file ready: {out_dir}/predictions.txt")
     print("Upload to: https://www.codabench.org/competitions/2469/")
 
 

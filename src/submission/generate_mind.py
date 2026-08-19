@@ -70,7 +70,7 @@ def generate_mind_submission(
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"prediction.txt"
+    out_path = out_dir / f"predictions.txt"
 
     lines = []
     for _, row in df.iterrows():
@@ -98,7 +98,7 @@ def main():
 
     out_dir = Path(f"outputs/submissions/mind/{args.retriever}")
     generate_mind_submission("mind", args.retriever, args.split, out_dir)
-    print(f"Submission file ready: {out_dir}/prediction.txt")
+    print(f"Submission file ready: {out_dir}/predictions.txt")
     print("Upload to: https://www.codabench.org/competitions/13967/")
 
 
