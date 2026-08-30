@@ -1,8 +1,7 @@
 # Design Note — CS4.406 Assignment 1
 ## Lexical & Semantic Retrieval on EB-NeRD and MIND
 
-**Author**: Manik Bansal  
-**Date**: August 2026  
+**Author**: Manik Bansal (2024101084)  
 **GitHub**: https://github.com/ManikBansal414/ire_a1
 
 ---
