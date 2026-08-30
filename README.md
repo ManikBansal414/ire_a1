@@ -178,3 +178,11 @@ The LightGBM reranker (`generate_ebnerd_submission.py`) uses 8 features per cand
 - No large files: `data/`, `*.zip`, `*.pt`, `*.ckpt`, `*.npy`, `*.faiss` are gitignored
 - Commit frequently with meaningful messages
 - No force-pushes after deadline
+
+---
+
+## AI Usage Log
+
+All prompts and chat history with AI tools used during this assignment:
+
+- **Gemini chat export**: https://share.gemini.google/TSRfxdcRFxPg
