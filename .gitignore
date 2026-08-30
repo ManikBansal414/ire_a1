@@ -43,7 +43,9 @@ Thumbs.db
 # ── Outputs (keep predictions committed but ignore intermediate) ───────────────
 outputs/embeddings/
 outputs/indexes/
+outputs/submissions/
 
 # ── Logs ─────────────────────────────────────────────────────────────────────
 *.log
 logs/
+worker*.log
